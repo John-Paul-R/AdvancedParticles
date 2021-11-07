@@ -26,13 +26,130 @@ export function init() {
     ctx.fillRect(10, 10, 10, 10);
 }
 
-type SystemSettings = {};
+type NumberRange = {
+    min: number;
+    max: number;
+};
 
-type SystemState = {};
+const randInRange = ({ min, max }: NumberRange) =>
+    Math.random() * (max - min) + min;
+
+const randIntInRange = ({ min, max }: NumberRange) =>
+    Math.round(Math.random() * (max - min) + min);
+
+type Rectangle = {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+};
+
+type BoundingBox = {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+};
+
+const rectToBounds = ({ x, y, w, h }: Rectangle): BoundingBox => ({
+    x1: x,
+    y1: y,
+    x2: x + w,
+    y2: y + h,
+});
+
+type SystemSettings = {
+    particleCount: number;
+    size: number | NumberRange;
+    velocity: number | NumberRange;
+    dimensions: Rectangle;
+};
+
+type ParticleState = {
+    x: number;
+    y: number;
+    velocity: number;
+    /**
+     * angle component of velocity
+     */
+    direction: number;
+};
+
+type SystemState = {
+    particles: ParticleState[];
+};
 
 type FrameGenerationProps = {
+    ctx: CanvasRenderingContext2D;
     settings: SystemSettings;
     state: SystemState;
 };
 
-function nextFrame({ settings, state }: FrameGenerationProps) {}
+function generateParticles({
+    particleCount,
+    size,
+    velocity,
+    dimensions,
+}: SystemSettings) {
+    const particles: ParticleState[] = [];
+    const { x1, y1, x2, y2 } = rectToBounds(dimensions);
+    for (let i = 0; i < particleCount; i++) {
+        particles.push({
+            x: randInRange({ min: x1, max: x2 }),
+            y: randInRange({ min: y1, max: y2 }),
+            velocity:
+                typeof velocity === "number" ? velocity : randInRange(velocity),
+            direction: Math.random() * 2 * Math.PI,
+        });
+    }
+    return particles;
+}
+
+export function generateInitialState(settings: SystemSettings) {
+    return {
+        particles: generateParticles(settings),
+    };
+}
+
+const timeFactor = 10 / 60;
+
+const nextParticleState = (
+    state: ParticleState,
+    settings: SystemSettings
+): ParticleState => {
+    const distTraveled = state.velocity * timeFactor;
+    return {
+        x: state.x + Math.cos(state.direction) * distTraveled,
+        y: state.y + Math.sin(state.direction) * distTraveled,
+        velocity: state.velocity,
+        direction: state.direction, // todo wall bounce and other physics
+    };
+};
+
+export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
+    // "nextState" and "renderFrame" are logically separate...
+    // However it might be worth keeping them in same loop for
+    // performance?
+
+    const { particles } = state;
+    const nextParticles: ParticleState[] = [];
+    const { width, height } = ctx.canvas;
+    ctx.clearRect(0, 0, width, height);
+    ctx.beginPath();
+    ctx.fillStyle = "#353535";
+    for (const particle of particles) {
+        // draw some circles
+        // ctx.fillStyle = "#353535";
+        ctx.moveTo(particle.x, particle.y);
+        ctx.ellipse(particle.x, particle.y, 3, 3, Math.PI * 2, 0, Math.PI * 2);
+        nextParticles.push(nextParticleState(particle, settings));
+    }
+    ctx.stroke();
+    ctx.closePath();
+
+    requestAnimationFrame((time) =>
+        nextFrame({ ctx, settings, state: { particles: nextParticles } })
+    );
+}
+
+// TODO: Rename option: "Contentful Particles"
