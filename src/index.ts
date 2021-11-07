@@ -62,7 +62,7 @@ type SystemSettings = {
     particleCount: number;
     size: number | NumberRange;
     velocity: number | NumberRange;
-    dimensions: Rectangle;
+    bounds: BoundingBox;
 };
 
 type ParticleState = {
@@ -89,10 +89,10 @@ function generateParticles({
     particleCount,
     size,
     velocity,
-    dimensions,
+    bounds,
 }: SystemSettings) {
     const particles: ParticleState[] = [];
-    const { x1, y1, x2, y2 } = rectToBounds(dimensions);
+    const { x1, y1, x2, y2 } = bounds;
     for (let i = 0; i < particleCount; i++) {
         particles.push({
             x: randInRange({ min: x1, max: x2 }),
@@ -113,16 +113,53 @@ export function generateInitialState(settings: SystemSettings) {
 
 const timeFactor = 10 / 60;
 
+const isInRange = (num: number, { min, max }: NumberRange) =>
+    num > min && num < max;
+
+const flipDirection = (cos: number, sin: number, axis: "x" | "y") => {
+    if (axis === "x") {
+        return Math.atan2(sin, -cos);
+    }
+    return Math.atan2(-sin, cos);
+};
+
+const computeNextDirection = (
+    cos: number,
+    sin: number,
+    x: number,
+    y: number,
+    bounds: BoundingBox
+) => {
+    const nextCos = isInRange(x, { min: bounds.x1, max: bounds.x2 })
+        ? cos
+        : -cos;
+    const nextSin = isInRange(y, { min: bounds.y1, max: bounds.y2 })
+        ? sin
+        : -sin;
+    return Math.atan2(nextSin, nextCos);
+};
+
 const nextParticleState = (
     state: ParticleState,
     settings: SystemSettings
 ): ParticleState => {
     const distTraveled = state.velocity * timeFactor;
+    const cos = Math.cos(state.direction); // x-component
+    const sin = Math.sin(state.direction); // y-component
+    const nextX = state.x + cos * distTraveled;
+    const nextY = state.y + sin * distTraveled;
+
     return {
-        x: state.x + Math.cos(state.direction) * distTraveled,
-        y: state.y + Math.sin(state.direction) * distTraveled,
+        x: nextX,
+        y: nextY,
         velocity: state.velocity,
-        direction: state.direction, // todo wall bounce and other physics
+        direction: computeNextDirection(
+            cos,
+            sin,
+            nextX,
+            nextY,
+            settings.bounds
+        ),
     };
 };
 
