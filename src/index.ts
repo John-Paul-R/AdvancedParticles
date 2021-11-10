@@ -63,6 +63,7 @@ type SystemSettings = {
     size: number | NumberRange;
     velocity: number | NumberRange;
     bounds: BoundingBox;
+    colorSupplier?: (state: ParticleState) => string;
 };
 
 type ParticleState = {
@@ -163,26 +164,34 @@ const nextParticleState = (
     };
 };
 
+/**
+ * Renders the current frame, generates the next state, and
+ * calls requestAnimationFrame with this new state. (infinite)
+ */
 export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
     // "nextState" and "renderFrame" are logically separate...
     // However it might be worth keeping them in same loop for
     // performance?
 
+    // We can do a lot more cool things with this if rendering is separate...
+    // (e.g. transforming the entire system based on some other function)
+
     const { particles } = state;
     const nextParticles: ParticleState[] = [];
     const { width, height } = ctx.canvas;
     ctx.clearRect(0, 0, width, height);
-    ctx.beginPath();
     ctx.fillStyle = "#353535";
     for (const particle of particles) {
         // draw some circles
-        // ctx.fillStyle = "#353535";
+        ctx.beginPath();
+        ctx.fillStyle = settings.colorSupplier?.(particle) ?? "#353535";
+        ctx.strokeStyle = settings.colorSupplier?.(particle) ?? "#353535";
         ctx.moveTo(particle.x, particle.y);
         ctx.ellipse(particle.x, particle.y, 3, 3, Math.PI * 2, 0, Math.PI * 2);
         nextParticles.push(nextParticleState(particle, settings));
+        ctx.stroke();
+        ctx.closePath();
     }
-    ctx.stroke();
-    ctx.closePath();
 
     requestAnimationFrame((time) =>
         nextFrame({ ctx, settings, state: { particles: nextParticles } })
