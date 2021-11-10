@@ -65,6 +65,7 @@ type SystemSettings = {
     bounds: BoundingBox;
     colorSupplier?: (state: ParticleState) => string;
     maxLineRange?: number;
+    circleMode?: "fill" | "stroke";
 };
 
 type ParticleState = {
@@ -176,7 +177,7 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
 
     // We can do a lot more cool things with this if rendering is separate...
     // (e.g. transforming the entire system based on some other function)
-    const { maxLineRange, sizeSupplier, colorSupplier } = settings;
+    const { maxLineRange, sizeSupplier, colorSupplier, circleMode } = settings;
     const { particles } = state;
     const nextParticles: ParticleState[] = [];
     const { width, height } = ctx.canvas;
@@ -221,7 +222,7 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
             0,
             Math.PI * 2
         );
-        ctx.stroke();
+        circleMode === "fill" ? ctx.fill() : ctx.stroke();
         ctx.closePath();
 
         // calc next particle state
