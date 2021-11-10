@@ -64,6 +64,7 @@ type SystemSettings = {
     velocity: number | NumberRange;
     bounds: BoundingBox;
     colorSupplier?: (state: ParticleState) => string;
+    maxLineRange?: number;
 };
 
 type ParticleState = {
@@ -175,21 +176,38 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
 
     // We can do a lot more cool things with this if rendering is separate...
     // (e.g. transforming the entire system based on some other function)
-
+    const { maxLineRange } = settings;
     const { particles } = state;
     const nextParticles: ParticleState[] = [];
     const { width, height } = ctx.canvas;
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#353535";
-    for (const particle of particles) {
+    for (let i = 0; i < particles.length; i++) {
+        const particle = particles[i];
         // draw some circles
         ctx.beginPath();
         ctx.fillStyle = settings.colorSupplier?.(particle) ?? "#353535";
         ctx.strokeStyle = settings.colorSupplier?.(particle) ?? "#353535";
         ctx.moveTo(particle.x, particle.y);
         ctx.ellipse(particle.x, particle.y, 3, 3, Math.PI * 2, 0, Math.PI * 2);
-        nextParticles.push(nextParticleState(particle, settings));
         ctx.stroke();
+
+        ctx.strokeStyle = "#000000";
+        if (maxLineRange) {
+            for (let j = i; j < particles.length; j++) {
+                const { x: oX, y: oY } = particles[j];
+                if (
+                    Math.sqrt((oX - particle.x) ** 2 + (oY - particle.y) ** 2) <
+                    maxLineRange
+                ) {
+                    ctx.moveTo(particle.x, particle.y);
+                    ctx.lineTo(oX, oY);
+                }
+            }
+            ctx.stroke();
+        }
+        nextParticles.push(nextParticleState(particle, settings));
+
         ctx.closePath();
     }
 
