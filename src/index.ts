@@ -60,7 +60,7 @@ const rectToBounds = ({ x, y, w, h }: Rectangle): BoundingBox => ({
 
 type SystemSettings = {
     particleCount: number;
-    size: number | NumberRange;
+    sizeSupplier: (state: ParticleState) => number;
     velocity: number | NumberRange;
     bounds: BoundingBox;
     colorSupplier?: (state: ParticleState) => string;
@@ -89,7 +89,7 @@ type FrameGenerationProps = {
 
 function generateParticles({
     particleCount,
-    size,
+    sizeSupplier,
     velocity,
     bounds,
 }: SystemSettings) {
@@ -176,7 +176,7 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
 
     // We can do a lot more cool things with this if rendering is separate...
     // (e.g. transforming the entire system based on some other function)
-    const { maxLineRange } = settings;
+    const { maxLineRange, sizeSupplier, colorSupplier } = settings;
     const { particles } = state;
     const nextParticles: ParticleState[] = [];
     const { width, height } = ctx.canvas;
@@ -208,10 +208,19 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
 
         // draw some circles
         ctx.beginPath();
-        ctx.fillStyle = settings.colorSupplier?.(particle) ?? "#353535";
-        ctx.strokeStyle = settings.colorSupplier?.(particle) ?? "#353535";
+        ctx.fillStyle = colorSupplier?.(particle) ?? "#353535";
+        ctx.strokeStyle = colorSupplier?.(particle) ?? "#353535";
         ctx.moveTo(particle.x, particle.y);
-        ctx.ellipse(particle.x, particle.y, 3, 3, Math.PI * 2, 0, Math.PI * 2);
+        const size = sizeSupplier(particle);
+        ctx.ellipse(
+            particle.x,
+            particle.y,
+            size,
+            size,
+            Math.PI * 2,
+            0,
+            Math.PI * 2
+        );
         ctx.stroke();
         ctx.closePath();
 
