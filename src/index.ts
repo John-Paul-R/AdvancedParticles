@@ -184,16 +184,11 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
     ctx.fillStyle = "#353535";
     for (let i = 0; i < particles.length; i++) {
         const particle = particles[i];
-        // draw some circles
-        ctx.beginPath();
-        ctx.fillStyle = settings.colorSupplier?.(particle) ?? "#353535";
-        ctx.strokeStyle = settings.colorSupplier?.(particle) ?? "#353535";
-        ctx.moveTo(particle.x, particle.y);
-        ctx.ellipse(particle.x, particle.y, 3, 3, Math.PI * 2, 0, Math.PI * 2);
-        ctx.stroke();
 
+        // draw some lines
         ctx.strokeStyle = "#000000";
         if (maxLineRange) {
+            ctx.beginPath();
             for (let j = i; j < particles.length; j++) {
                 const { x: oX, y: oY } = particles[j];
                 if (
@@ -205,10 +200,23 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
                 }
             }
             ctx.stroke();
+            ctx.closePath();
         }
-        nextParticles.push(nextParticleState(particle, settings));
 
+        // TODO: Technically lines should be a separate iteration from circles...
+        // (because circles should always be above) Current implementation depends on order.
+
+        // draw some circles
+        ctx.beginPath();
+        ctx.fillStyle = settings.colorSupplier?.(particle) ?? "#353535";
+        ctx.strokeStyle = settings.colorSupplier?.(particle) ?? "#353535";
+        ctx.moveTo(particle.x, particle.y);
+        ctx.ellipse(particle.x, particle.y, 3, 3, Math.PI * 2, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.closePath();
+
+        // calc next particle state
+        nextParticles.push(nextParticleState(particle, settings));
     }
 
     requestAnimationFrame((time) =>
