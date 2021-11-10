@@ -65,6 +65,10 @@ type SystemSettings = {
     bounds: BoundingBox;
     colorSupplier?: (state: ParticleState) => string;
     maxLineRange?: number;
+    lineColorSupplier?: (
+        particle1: ParticleState,
+        particle2: ParticleState
+    ) => string;
     circleMode?: "fill" | "stroke";
 };
 
@@ -177,7 +181,13 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
 
     // We can do a lot more cool things with this if rendering is separate...
     // (e.g. transforming the entire system based on some other function)
-    const { maxLineRange, sizeSupplier, colorSupplier, circleMode } = settings;
+    const {
+        maxLineRange,
+        sizeSupplier,
+        colorSupplier,
+        circleMode,
+        lineColorSupplier,
+    } = settings;
     const { particles } = state;
     const nextParticles: ParticleState[] = [];
     const { width, height } = ctx.canvas;
@@ -189,19 +199,22 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
         // draw some lines
         ctx.strokeStyle = "#000000";
         if (maxLineRange) {
-            ctx.beginPath();
             for (let j = i; j < particles.length; j++) {
                 const { x: oX, y: oY } = particles[j];
                 if (
                     Math.sqrt((oX - particle.x) ** 2 + (oY - particle.y) ** 2) <
                     maxLineRange
                 ) {
+                    ctx.beginPath();
                     ctx.moveTo(particle.x, particle.y);
                     ctx.lineTo(oX, oY);
+                    ctx.strokeStyle =
+                        lineColorSupplier?.(particle, particles[j]) ??
+                        "#000000";
+                    ctx.stroke();
+                    ctx.closePath();
                 }
             }
-            ctx.stroke();
-            ctx.closePath();
         }
 
         // TODO: Technically lines should be a separate iteration from circles...
