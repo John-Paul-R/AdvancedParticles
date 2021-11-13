@@ -218,7 +218,7 @@ export function nextFrame({
     // Relates colors to array of particle pairs
     const lineBatches: { [key: string]: ParticleState[][] } = {};
 
-    const drawLine = (
+    const batchLine = (
         particle1: ParticleState,
         particle2: ParticleState,
         maxRange: number
@@ -228,15 +228,12 @@ export function nextFrame({
                 (particle2.y - particle1.y) ** 2 <
             maxRange ** 2
         ) {
-            // ctx.beginPath();
-            // ctx.moveTo(particle1.x, particle1.y);
-            // ctx.lineTo(particle2.x, particle2.y);
-            // ctx.strokeStyle = lineColorSupplier(particle1, particle2);
-            // ctx.stroke();
-            // ctx.closePath();
             const color = lineColorSupplier(particle1, particle2);
-            const batch = lineBatches[color] ?? [];
-            lineBatches[color] = batch;
+            let batch = lineBatches[color];
+            if (batch === undefined) {
+                batch = [];
+                lineBatches[color] = batch;
+            }
             batch.push([particle1, particle2]);
         }
     };
@@ -249,7 +246,7 @@ export function nextFrame({
             for (let i = 0; i < particles.length; i++) {
                 // draw some lines
                 for (let j = i + 1; j < particles.length; j++) {
-                    drawLine(particles[i], particles[j], maxLineRange);
+                    batchLine(particles[i], particles[j], maxLineRange);
                 }
             }
             for (const [color, particlePairs] of Object.entries(lineBatches)) {
