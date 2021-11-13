@@ -69,7 +69,7 @@ type SystemSettings = {
         particle1: ParticleState,
         particle2: ParticleState
     ) => string;
-    circleMode?: "fill" | "stroke";
+    circleMode?: "fill" | "stroke" | "disabled";
 };
 
 type ParticleState = {
@@ -90,6 +90,7 @@ type FrameGenerationProps = {
     ctx: CanvasRenderingContext2D;
     settings: SystemSettings;
     state: SystemState;
+    renderCallback?: (info: {}) => void;
 };
 
 function generateParticles({
@@ -170,11 +171,33 @@ const nextParticleState = (
     };
 };
 
+let frameCount = 0;
+const averageTimes: { [key: string]: number } = {
+    lines: 0,
+    circles: 0,
+    nextState: 0,
+};
+
+const calcRollingAvg = (
+    currentAvg: number,
+    frameCount: number,
+    startTime: number,
+    endTime: number
+) =>
+    currentAvg * ((frameCount - 1) / frameCount) +
+    (endTime - startTime) * (1 / frameCount);
+
 /**
  * Renders the current frame, generates the next state, and
  * calls requestAnimationFrame with this new state. (infinite)
  */
-export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
+export function nextFrame({
+    ctx,
+    settings,
+    state,
+    renderCallback,
+}: FrameGenerationProps) {
+    frameCount += 1;
     // "nextState" and "renderFrame" are logically separate...
     // However it might be worth keeping them in same loop for
     // performance?
@@ -184,66 +207,132 @@ export function nextFrame({ ctx, settings, state }: FrameGenerationProps) {
     const {
         maxLineRange,
         sizeSupplier,
-        colorSupplier,
+        colorSupplier = () => "#656565",
         circleMode,
-        lineColorSupplier,
+        lineColorSupplier = () => "#353535",
     } = settings;
     const { particles } = state;
-    const nextParticles: ParticleState[] = [];
     const { width, height } = ctx.canvas;
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#353535";
-    for (let i = 0; i < particles.length; i++) {
-        const particle = particles[i];
 
-        // draw some lines
-        ctx.strokeStyle = "#000000";
+    // Relates colors to array of particle pairs
+    const lineBatches: { [key: string]: ParticleState[][] } = {};
+
+    const drawLine = (
+        particle1: ParticleState,
+        particle2: ParticleState,
+        maxRange: number
+    ) => {
+        if (
+            (particle2.x - particle1.x) ** 2 +
+                (particle2.y - particle1.y) ** 2 <
+            maxRange ** 2
+        ) {
+            // ctx.beginPath();
+            // ctx.moveTo(particle1.x, particle1.y);
+            // ctx.lineTo(particle2.x, particle2.y);
+            // ctx.strokeStyle = lineColorSupplier(particle1, particle2);
+            // ctx.stroke();
+            // ctx.closePath();
+            const color = lineColorSupplier(particle1, particle2);
+            const batch = lineBatches[color] ?? [];
+            lineBatches[color] = batch;
+            batch.push([particle1, particle2]);
+        }
+    };
+
+    // Lines loop
+    {
+        const start = performance.now();
+
         if (maxLineRange) {
-            for (let j = i; j < particles.length; j++) {
-                const { x: oX, y: oY } = particles[j];
-                if (
-                    Math.sqrt((oX - particle.x) ** 2 + (oY - particle.y) ** 2) <
-                    maxLineRange
-                ) {
-                    ctx.beginPath();
-                    ctx.moveTo(particle.x, particle.y);
-                    ctx.lineTo(oX, oY);
-                    ctx.strokeStyle =
-                        lineColorSupplier?.(particle, particles[j]) ??
-                        "#000000";
-                    ctx.stroke();
-                    ctx.closePath();
+            for (let i = 0; i < particles.length; i++) {
+                // draw some lines
+                for (let j = i + 1; j < particles.length; j++) {
+                    drawLine(particles[i], particles[j], maxLineRange);
                 }
+            }
+            for (const [color, particlePairs] of Object.entries(lineBatches)) {
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                for (let i = 0; i < particlePairs.length; i++) {
+                    const pair = particlePairs[i];
+                    ctx.moveTo(pair[0].x, pair[0].y);
+                    ctx.lineTo(pair[1].x, pair[1].y);
+                }
+                ctx.stroke();
+                ctx.closePath();
             }
         }
 
-        // TODO: Technically lines should be a separate iteration from circles...
-        // (because circles should always be above) Current implementation depends on order.
-
-        // draw some circles
-        ctx.beginPath();
-        ctx.fillStyle = colorSupplier?.(particle) ?? "#353535";
-        ctx.strokeStyle = colorSupplier?.(particle) ?? "#353535";
-        ctx.moveTo(particle.x, particle.y);
-        const size = sizeSupplier(particle);
-        ctx.ellipse(
-            particle.x,
-            particle.y,
-            size,
-            size,
-            Math.PI * 2,
-            0,
-            Math.PI * 2
+        averageTimes["lines"] = calcRollingAvg(
+            averageTimes["lines"],
+            frameCount,
+            start,
+            performance.now()
         );
-        circleMode === "fill" ? ctx.fill() : ctx.stroke();
-        ctx.closePath();
+    }
+    // TODO: Technically lines should be a separate iteration from circles...
+    // (because circles should always be above) Current implementation depends on order.
 
-        // calc next particle state
-        nextParticles.push(nextParticleState(particle, settings));
+    {
+        const start = performance.now();
+        // Circles loop
+        if (circleMode !== "disabled") {
+            for (let i = 0; i < particles.length; i++) {
+                const particle = particles[i];
+
+                // draw some circles
+                ctx.fillStyle = colorSupplier(particle);
+                ctx.strokeStyle = ctx.fillStyle;
+                const size = sizeSupplier(particle);
+                ctx.moveTo(particle.x, particle.y);
+                ctx.beginPath();
+                ctx.ellipse(
+                    particle.x,
+                    particle.y,
+                    size,
+                    size,
+                    Math.PI * 2,
+                    0,
+                    Math.PI * 2
+                );
+                circleMode === "fill" ? ctx.fill() : ctx.stroke();
+                ctx.closePath();
+            }
+        }
+        averageTimes["circles"] = calcRollingAvg(
+            averageTimes["circles"],
+            frameCount,
+            start,
+            performance.now()
+        );
     }
 
+    const nextParticles: ParticleState[] = [];
+    {
+        const start = performance.now();
+        // calc next particle state
+        for (let i = 0; i < particles.length; i++) {
+            nextParticles.push(nextParticleState(particles[i], settings));
+        }
+        averageTimes["nextState"] = calcRollingAvg(
+            averageTimes["nextState"],
+            frameCount,
+            start,
+            performance.now()
+        );
+    }
+
+    renderCallback?.(averageTimes);
+
     requestAnimationFrame((time) =>
-        nextFrame({ ctx, settings, state: { particles: nextParticles } })
+        nextFrame({
+            ctx,
+            settings,
+            state: { particles: nextParticles },
+            renderCallback,
+        })
     );
 }
 
