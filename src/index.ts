@@ -61,7 +61,7 @@ const rectToBounds = ({ x, y, w, h }: Rectangle): BoundingBox => ({
 type SystemSettings = {
     particleCount: number;
     sizeSupplier: (state: ParticleState) => number;
-    velocity: number | NumberRange;
+    velocity: number | ((state: ParticleState) => number);
     bounds: BoundingBox;
     colorSupplier?: (state: ParticleState) => string;
     maxLineRange?: number;
@@ -105,8 +105,7 @@ function generateParticles({
         particles.push({
             x: randInRange({ min: x1, max: x2 }),
             y: randInRange({ min: y1, max: y2 }),
-            velocity:
-                typeof velocity === "number" ? velocity : randInRange(velocity),
+            velocity: typeof velocity === "number" ? velocity : 1,
             direction: Math.random() * 2 * Math.PI,
         });
     }
@@ -156,18 +155,12 @@ const nextParticleState = (
     const sin = Math.sin(state.direction); // y-component
     const nextX = state.x + cos * distTraveled;
     const nextY = state.y + sin * distTraveled;
-
+    const { velocity, bounds } = settings;
     return {
         x: nextX,
         y: nextY,
-        velocity: state.velocity,
-        direction: computeNextDirection(
-            cos,
-            sin,
-            nextX,
-            nextY,
-            settings.bounds
-        ),
+        velocity: typeof velocity === "function" ? velocity(state) : velocity,
+        direction: computeNextDirection(cos, sin, nextX, nextY, bounds),
     };
 };
 
