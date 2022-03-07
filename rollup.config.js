@@ -7,7 +7,7 @@ import * as path from "path";
 import pkg from "./package.json";
 
 const moduleName = pkg.name.replace(/^@.*\//, "");
-const inputFileName = "src/index.ts";
+const inputFileName = "src/page.ts";
 const author = pkg.author;
 const banner = `
   /**

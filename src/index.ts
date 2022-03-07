@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 export const sumEven = (nums: number[]) =>
     nums.reduce((tot, cur) => (cur % 2 === 0 ? tot + cur : tot));
 
@@ -26,7 +27,7 @@ export function init() {
     ctx.fillRect(10, 10, 10, 10);
 }
 
-type NumberRange = {
+export type NumberRange = {
     min: number;
     max: number;
 };
@@ -37,14 +38,14 @@ const randInRange = ({ min, max }: NumberRange) =>
 const randIntInRange = ({ min, max }: NumberRange) =>
     Math.round(Math.random() * (max - min) + min);
 
-type Rectangle = {
+export type Rectangle = {
     x: number;
     y: number;
     w: number;
     h: number;
 };
 
-type BoundingBox = {
+export type BoundingBox = {
     x1: number;
     y1: number;
     x2: number;
@@ -58,10 +59,18 @@ const rectToBounds = ({ x, y, w, h }: Rectangle): BoundingBox => ({
     y2: y + h,
 });
 
-type SystemSettings = {
+export type Velocity = {
+    vx: number;
+    vy: number; // radians
+};
+
+export type SystemSettings = {
+    // Why not just make a "next state" supplier?
+    // (If provided, it overrides most of these options)
     particleCount: number;
     sizeSupplier: (state: ParticleState) => number;
-    velocity: number | ((state: ParticleState) => number);
+    speed: number | ((state: ParticleState) => number);
+    velocity?: (state: ParticleState) => Velocity;
     bounds: BoundingBox;
     colorSupplier?: (state: ParticleState) => string;
     maxLineRange?: number;
@@ -72,31 +81,34 @@ type SystemSettings = {
     circleMode?: "fill" | "stroke" | "disabled";
 };
 
-type ParticleState = {
+export type ParticleState = {
     x: number;
     y: number;
-    velocity: number;
+    speed: number;
     /**
      * angle component of velocity
      */
     direction: number;
 };
 
-type SystemState = {
+export type SystemState = {
     particles: ParticleState[];
 };
 
-type FrameGenerationProps = {
+export type FrameGenerationProps = {
     ctx: CanvasRenderingContext2D;
     settings: SystemSettings;
     state: SystemState;
-    renderCallback?: (info: {}) => void;
+    renderCallback?: (
+        info: {},
+        settings: SystemSettings
+    ) => SystemSettings | void;
 };
 
 function generateParticles({
     particleCount,
     sizeSupplier,
-    velocity,
+    speed,
     bounds,
 }: SystemSettings) {
     const particles: ParticleState[] = [];
@@ -105,7 +117,7 @@ function generateParticles({
         particles.push({
             x: randInRange({ min: x1, max: x2 }),
             y: randInRange({ min: y1, max: y2 }),
-            velocity: typeof velocity === "number" ? velocity : 1,
+            speed: typeof speed === "number" ? speed : 1,
             direction: Math.random() * 2 * Math.PI,
         });
     }
@@ -150,17 +162,36 @@ const nextParticleState = (
     state: ParticleState,
     settings: SystemSettings
 ): ParticleState => {
-    const distTraveled = state.velocity * timeFactor;
+    const distTraveled = state.speed * timeFactor;
     const cos = Math.cos(state.direction); // x-component
     const sin = Math.sin(state.direction); // y-component
     const nextX = state.x + cos * distTraveled;
     const nextY = state.y + sin * distTraveled;
-    const { velocity, bounds } = settings;
+    const { speed, bounds, velocity } = settings;
+    let speedNum: number;
+    let directionNum: number = state.direction;
+    if (typeof speed === "function") {
+        speedNum = speed(state);
+        directionNum = computeNextDirection(cos, sin, nextX, nextY, bounds);
+    } else if (velocity !== undefined) {
+        const vel = velocity(state);
+        speedNum = Math.sqrt(vel.vx ** 2 + vel.vy ** 2);
+        directionNum = computeNextDirection(
+            vel.vx / speedNum,
+            vel.vy / speedNum,
+            nextX,
+            nextY,
+            bounds
+        );
+    } else {
+        speedNum = speed;
+        directionNum = computeNextDirection(cos, sin, nextX, nextY, bounds);
+    }
     return {
         x: nextX,
         y: nextY,
-        velocity: typeof velocity === "function" ? velocity(state) : velocity,
-        direction: computeNextDirection(cos, sin, nextX, nextY, bounds),
+        speed: speedNum,
+        direction: directionNum,
     };
 };
 
@@ -236,6 +267,9 @@ export function nextFrame({
         const start = performance.now();
 
         if (maxLineRange) {
+            // TODO: We can efficiently count number of lines per point here.
+            // Can be passed into other functions later, when rendering.
+            // Very interesting.
             for (let i = 0; i < particles.length; i++) {
                 // draw some lines
                 for (let j = i + 1; j < particles.length; j++) {
@@ -314,12 +348,12 @@ export function nextFrame({
         );
     }
 
-    renderCallback?.(averageTimes);
+    const nextSettings = renderCallback?.(averageTimes, settings);
 
     requestAnimationFrame((time) =>
         nextFrame({
             ctx,
-            settings,
+            settings: nextSettings ?? settings,
             state: { particles: nextParticles },
             renderCallback,
         })
